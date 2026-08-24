@@ -33,12 +33,12 @@ jobs:
       - name: 6. Prebuild Android Project
         run: npx expo prebuild --clean --platform android
 
-      - name: 7. Build Android APK
+      - name: 7. Build Android APK (Debug Mode - Instant Run)
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: 8. Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: instacart-grocery-apk
-          path: android/app/build/outputs/apk/**/*.apk
+          path: android/app/build/outputs/apk/debug/*.apk
