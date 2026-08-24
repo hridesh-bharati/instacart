@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, ActivityIndicator } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  SafeAreaView,
+  StatusBar,
+  Platform,
+} from 'react-native';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './src/firebaseConfig';
 
@@ -11,14 +17,12 @@ import HomeScreen from './src/screens/HomeScreen';
 import BrowseScreen from './src/screens/BrowseScreen';
 import OrdersScreen from './src/screens/OrdersScreen';
 import DashboardScreen from './src/screens/dashboard/DashboardScreen';
-import AuthScreen from './src/screens/AuthScreen'; // Correct Path
+import AuthScreen from './src/screens/AuthScreen';
 
 import colors from './src/constants/colors';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
   const [activeTab, setActiveTab] = useState('Home');
   const [cartVisible, setCartVisible] = useState(false);
   const [cart, setCart] = useState([]);
@@ -26,7 +30,6 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
-      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -51,41 +54,25 @@ export default function App() {
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
-  // Auth Guard
-  if (!currentUser) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-        <View style={styles.container}>
-          <AuthScreen />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} translucent={false} />
       <View style={styles.container}>
         
-        {/* Header Dashboard par hidden rahega */}
+        {/* Header sabhi main screens par dikhega */}
         {activeTab !== 'Dashboard' && (
-          <Header cartCount={totalCartCount} onOpenCart={() => setCartVisible(true)} />
+          <Header 
+            cartCount={totalCartCount} 
+            onOpenCart={() => setCartVisible(true)} 
+            currentUser={currentUser}
+          />
         )}
 
         <View style={styles.screenWrapper}>
           {activeTab === 'Home' && <HomeScreen onAddToCart={handleAddToCart} />}
-          {activeTab === 'Browse' && <BrowseScreen />}
-          {activeTab === 'Orders' && <OrdersScreen />}
-          {activeTab === 'Dashboard' && <DashboardScreen />}
+          {activeTab === 'Browse' && <BrowseScreen onAddToCart={handleAddToCart} />}
+          {activeTab === 'Orders' && (currentUser ? <OrdersScreen /> : <AuthScreen />)}
+          {activeTab === 'Dashboard' && (currentUser ? <DashboardScreen /> : <AuthScreen />)}
         </View>
 
         <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -95,6 +82,7 @@ export default function App() {
           onClose={() => setCartVisible(false)}
           cart={cart}
           onUpdateQty={handleUpdateQty}
+          currentUser={currentUser}
         />
 
       </View>
@@ -106,6 +94,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   container: {
     flex: 1,
@@ -116,11 +105,5 @@ const styles = StyleSheet.create({
   },
   screenWrapper: {
     flex: 1,
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
   },
 });
