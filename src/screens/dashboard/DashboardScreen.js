@@ -562,7 +562,6 @@ const styles = StyleSheet.create({
   orderTotal: { fontSize: 14, fontWeight: '800', color: colors.primary },
   orderActionBtn: { backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
   orderActionText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-
   profileHeaderCard: { backgroundColor: '#fff', alignItems: 'center', padding: 20, borderRadius: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB' },
   profileAvatarLarge: { width: 80, height: 80, borderRadius: 40, marginBottom: 10 },
   profileNameText: { fontSize: 18, fontWeight: '800', color: colors.textDark },
