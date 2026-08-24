@@ -1,0 +1,44 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: 3. Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: 4. Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 5. Install Dependencies
+        run: npm install
+
+      - name: 6. Prebuild Android Project
+        run: npx expo prebuild --clean --platform android
+
+      - name: 7. Build Android APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: 8. Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: instacart-grocery-apk
+          path: android/app/build/outputs/apk/**/*.apk
