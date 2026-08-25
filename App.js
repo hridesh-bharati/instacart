@@ -24,6 +24,7 @@ import colors from './src/constants/colors';
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState('Home');
+  const [selectedCategoryFromHome, setSelectedCategoryFromHome] = useState(null);
   const [cartVisible, setCartVisible] = useState(false);
   const [cart, setCart] = useState([]);
 
@@ -52,6 +53,12 @@ export default function App() {
     );
   };
 
+  // Switch to Browse tab and pass category
+  const handleCategorySelectFromHome = (categoryObj) => {
+    setSelectedCategoryFromHome(categoryObj);
+    setActiveTab('Browse');
+  };
+
   const totalCartCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
   return (
@@ -59,7 +66,7 @@ export default function App() {
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} translucent={false} />
       <View style={styles.container}>
         
-        {/* Header sabhi main screens par dikhega */}
+        {/* Header */}
         {activeTab !== 'Dashboard' && (
           <Header 
             cartCount={totalCartCount} 
@@ -69,8 +76,22 @@ export default function App() {
         )}
 
         <View style={styles.screenWrapper}>
-          {activeTab === 'Home' && <HomeScreen onAddToCart={handleAddToCart} />}
-          {activeTab === 'Browse' && <BrowseScreen onAddToCart={handleAddToCart} />}
+          {activeTab === 'Home' && (
+            <HomeScreen
+              onAddToCart={handleAddToCart}
+              onNavigateToCategory={handleCategorySelectFromHome}
+            />
+          )}
+
+          {activeTab === 'Browse' && (
+            <BrowseScreen
+              key={selectedCategoryFromHome ? selectedCategoryFromHome.title : 'browse-all'}
+              onAddToCart={handleAddToCart}
+              initialCategory={selectedCategoryFromHome}
+              onResetInitialCategory={() => setSelectedCategoryFromHome(null)}
+            />
+          )}
+
           {activeTab === 'Orders' && (currentUser ? <OrdersScreen /> : <AuthScreen />)}
           {activeTab === 'Dashboard' && (currentUser ? <DashboardScreen /> : <AuthScreen />)}
         </View>

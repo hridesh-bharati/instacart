@@ -1,3 +1,4 @@
+// src\screens\dashboard\Admin\AdminDashboard.js
 import React from 'react';
 import { StyleSheet, View, Text, ScrollView } from 'react-native';
 import colors from '../../../constants/colors';

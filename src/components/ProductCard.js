@@ -3,35 +3,77 @@ import { StyleSheet, View, Text, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../constants/colors';
 
-export default function ProductCard({ item, onAddToCart }) {
+export default function ProductCard({
+  item,
+  onAddToCart,
+  onOpenDetails,
+  isWishlisted = false,
+  onToggleWishlist,
+}) {
+  const price = typeof item.price === 'number' ? item.price : parseFloat(item.price || 0);
+
   return (
-    <View style={styles.card}>
-      <TouchableOpacity style={styles.wishlistBtn}>
-        <Ionicons name="heart-outline" size={16} color={colors.primary} />
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.9}
+      onPress={() => onOpenDetails && onOpenDetails(item)}
+    >
+      {/* Heart / Wishlist Button */}
+      <TouchableOpacity
+        style={styles.wishlistBtn}
+        onPress={(e) => {
+          e.stopPropagation();
+          onToggleWishlist && onToggleWishlist(item);
+        }}
+      >
+        <Ionicons
+          name={isWishlisted ? 'heart' : 'heart-outline'}
+          size={16}
+          color={isWishlisted ? '#E53935' : colors.primary}
+        />
       </TouchableOpacity>
+
+      {/* Product Image */}
       <Image source={{ uri: item.image }} style={styles.image} />
-      <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-      <Text style={styles.weight}>{item.weight}</Text>
+
+      {/* Product Name & Weight/Unit */}
+      <Text style={styles.name} numberOfLines={1}>
+        {item.name || item.title}
+      </Text>
+      <Text style={styles.weight}>{item.weight || item.unit || '1 unit'}</Text>
+
+      {/* Price Row & Add Button */}
       <View style={styles.priceRow}>
-        <Text style={styles.price}>${item.price.toFixed(2)}</Text>
-        <Text style={styles.oldPrice}>{item.oldPrice}</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={() => onAddToCart(item)}>
+        <Text style={styles.price}>₹{price.toFixed(2)}</Text>
+        {item.oldPrice ? (
+          <Text style={styles.oldPrice}>
+            {typeof item.oldPrice === 'number' ? `₹${item.oldPrice}` : item.oldPrice}
+          </Text>
+        ) : null}
+
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={(e) => {
+            e.stopPropagation();
+            onAddToCart && onAddToCart(item);
+          }}
+        >
           <Ionicons name="add" size={16} color="#fff" />
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.cardBg,
+    backgroundColor: colors.cardBg || '#fff',
     width: 145,
     borderRadius: 18,
     padding: 12,
     marginRight: 14,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.border || '#EFEFEF',
   },
   wishlistBtn: {
     position: 'absolute',

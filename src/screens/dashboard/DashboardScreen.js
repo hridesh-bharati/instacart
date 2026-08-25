@@ -7,60 +7,95 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  Modal,
+  Platform,
   Alert,
+  Switch,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import {
   collection,
   addDoc,
   updateDoc,
   deleteDoc,
   doc,
+  getDoc,
+  setDoc,
   onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
-import { updateProfile } from 'firebase/auth';
+import { updateProfile, signOut } from 'firebase/auth';
 import colors from '../../constants/colors';
 
 const SECTIONS = [
-  { key: 'flashSale', label: 'Flash Sale' },
-  { key: 'featuredStores', label: 'Featured Stores' },
-  { key: 'dailyEssentials', label: 'Daily Essentials' },
+  { key: 'flashSale', label: 'Flash Sale', icon: 'flash-outline' },
+  { key: 'dailyEssentials', label: 'Daily Essentials', icon: 'basket-outline' },
+  { key: 'browseCategories', label: 'Browse Tabs', icon: 'grid-outline' },
+  { key: 'featuredStores', label: 'Stores', icon: 'storefront-outline' },
 ];
 
 export default function DashboardScreen() {
-  // Navigation / Tab Switcher inside Dashboard
-  const [activeMainTab, setActiveMainTab] = useState('Overview'); // 'Overview' | 'Products' | 'Orders' | 'Profile'
+  const currentUser = auth.currentUser;
 
-  // Accordion & Category states for Products
+  const [activeMainTab, setActiveMainTab] = useState('Products');
   const [activeSection, setActiveSection] = useState('flashSale');
+
   const [items, setItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Form States for Products / Stores
+  // Modal State for Add / Edit
+  const [modalVisible, setModalVisible] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
+  // Global Loading States
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [savingProduct, setSavingProduct] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
+
+  // Form Fields
   const [title, setTitle] = useState('');
   const [image, setImage] = useState('');
+  const [brand, setBrand] = useState('');
+  const [category, setCategory] = useState('');
   const [price, setPrice] = useState('');
   const [oldPrice, setOldPrice] = useState('');
   const [unit, setUnit] = useState('');
-  const [tag, setTag] = useState('');
   const [rating, setRating] = useState('');
+  const [reviewsCount, setReviewsCount] = useState('');
+  const [description, setDescription] = useState('');
+  const [countLabel, setCountLabel] = useState('');
+  const [iconName, setIconName] = useState('');
+  const [bgColor, setBgColor] = useState('');
+  const [tag, setTag] = useState('');
   const [deliveryTime, setDeliveryTime] = useState('');
-  const [editingId, setEditingId] = useState(null);
 
-  // Profile Edit States
+  // Profile Data
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [profileName, setProfileName] = useState(auth.currentUser?.displayName || 'Admin Hridesh');
-  const [profileEmail, setProfileEmail] = useState(auth.currentUser?.email || 'admin@instacart.com');
-  const [profilePhone, setProfilePhone] = useState('+91 7267995307');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileData, setProfileData] = useState({
+    name: currentUser?.displayName || 'Admin User',
+    email: currentUser?.email || 'admin@instacart.com',
+    phone: '+91 7267995307',
+    avatar:
+      currentUser?.photoURL ||
+      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&q=80',
+    storeName: 'Instacart Supermarket',
+    storeTagline: 'Fresh Groceries Delivered in 15 Mins',
+    address: 'Nichlaul, Maharajganj, Uttar Pradesh, 273304',
+    upiId: '7267995307@upi',
+    operatingHours: '07:00 AM - 11:00 PM',
+    isStoreOpen: true,
+    instantDelivery: true,
+  });
 
-  // Live Firestore Fetch for Products
+  // 1. Live Sync
   useEffect(() => {
     if (!db) return;
     setLoadingItems(true);
-    resetProductForm();
     const unsubscribe = onSnapshot(collection(db, activeSection), (snapshot) => {
       const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       setItems(list);
@@ -69,137 +104,302 @@ export default function DashboardScreen() {
     return () => unsubscribe();
   }, [activeSection]);
 
-  const resetProductForm = () => {
+  // 2. Load Profile
+  useEffect(() => {
+    async function loadSettings() {
+      if (!db || !currentUser?.uid) return;
+      try {
+        const docRef = doc(db, 'adminSettings', currentUser.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setProfileData((prev) => ({ ...prev, ...docSnap.data() }));
+        }
+      } catch (err) {
+        console.error('Settings load error:', err);
+      }
+    }
+    loadSettings();
+  }, [currentUser]);
+
+  // Fast & CORS-Proof Gallery Image Picker
+  const handlePickFile = async (isAvatar = false) => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        if (Platform.OS === 'web') alert('Permission to access device media is required!');
+        else Alert.alert('Permission Denied', 'Permission to access device media is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: isAvatar ? [1, 1] : [4, 3],
+        quality: 0.4, // Lightweight base64 for fast rendering
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setUploadingImage(true);
+        setLoadingMessage(isAvatar ? 'Updating Profile Avatar...' : 'Loading Image Preview...');
+
+        const imageUri = asset.base64
+          ? `data:image/jpeg;base64,${asset.base64}`
+          : asset.uri;
+
+        if (isAvatar) {
+          setProfileData((prev) => ({ ...prev, avatar: imageUri }));
+          if (db && currentUser?.uid) {
+            await setDoc(
+              doc(db, 'adminSettings', currentUser.uid),
+              { avatar: imageUri, updatedAt: serverTimestamp() },
+              { merge: true }
+            );
+          }
+        } else {
+          setImage(imageUri);
+        }
+
+        setUploadingImage(false);
+        setLoadingMessage('');
+      }
+    } catch (err) {
+      setUploadingImage(false);
+      setLoadingMessage('');
+      if (Platform.OS === 'web') alert('File Selection Error: ' + err.message);
+      else Alert.alert('Error', err.message);
+    }
+  };
+
+  const resetForm = () => {
     setTitle('');
     setImage('');
+    setBrand('');
+    setCategory('');
     setPrice('');
     setOldPrice('');
     setUnit('');
-    setTag('');
     setRating('');
+    setReviewsCount('');
+    setDescription('');
+    setCountLabel('');
+    setIconName('');
+    setBgColor('');
+    setTag('');
     setDeliveryTime('');
     setEditingId(null);
   };
 
-  // Product CRUD
+  const handleOpenAddModal = () => {
+    resetForm();
+    setModalVisible(true);
+  };
+
+  const handleOpenEditModal = (item) => {
+    setEditingId(item.id);
+    setTitle(item.name || item.title || '');
+    setImage(item.image || '');
+
+    if (activeSection === 'browseCategories') {
+      setCountLabel(item.count || '');
+      setIconName(item.icon || '');
+      setBgColor(item.bgColor || '');
+    } else if (activeSection === 'featuredStores') {
+      setTag(item.tag || '');
+      setRating(String(item.rating || ''));
+      setDeliveryTime(item.deliveryTime || '');
+    } else {
+      setBrand(item.brand || '');
+      setCategory(item.category || '');
+      setPrice(String(item.price || ''));
+      setOldPrice(item.oldPrice ? String(item.oldPrice) : '');
+      setUnit(item.unit || item.weight || '');
+      setRating(String(item.rating || ''));
+      setReviewsCount(item.reviewsCount || '');
+      setDescription(item.description || '');
+    }
+    setModalVisible(true);
+  };
+
   const handleSaveProduct = async () => {
-    if (!title || !image) {
-      Alert.alert('Validation', 'Name and Image URL are required.');
+    if (!title) {
+      if (Platform.OS === 'web') alert('Title / Name is required');
+      else Alert.alert('Validation Error', 'Title / Name is required');
       return;
     }
 
-    let payload = {
-      image: image.trim(),
-      updatedAt: serverTimestamp(),
-    };
+    setSavingProduct(true);
+    setLoadingMessage(editingId ? 'Updating in Cloud...' : 'Publishing to live store...');
 
-    if (activeSection === 'featuredStores') {
+    let payload = { updatedAt: serverTimestamp() };
+
+    if (activeSection === 'browseCategories') {
+      payload = {
+        ...payload,
+        title: title.trim(),
+        count: countLabel.trim() || '100+ items',
+        icon: iconName.trim() || 'basket',
+        bgColor: bgColor.trim() || '#FFF3E0',
+      };
+    } else if (activeSection === 'featuredStores') {
+      if (!image) {
+        setSavingProduct(false);
+        if (Platform.OS === 'web') alert('Please select a store image file');
+        else Alert.alert('Validation Error', 'Please select a store image file');
+        return;
+      }
       payload = {
         ...payload,
         name: title.trim(),
-        tag: tag.trim() || 'Store',
+        image: image,
+        tag: tag.trim() || 'Supermarket',
         rating: rating.trim() || '4.8',
         deliveryTime: deliveryTime.trim() || '20-30 min',
       };
     } else {
       if (!price) {
-        Alert.alert('Validation', 'Price is required.');
+        setSavingProduct(false);
+        if (Platform.OS === 'web') alert('Price is required');
+        else Alert.alert('Validation Error', 'Price is required');
+        return;
+      }
+      if (!image) {
+        setSavingProduct(false);
+        if (Platform.OS === 'web') alert('Please select a product image file');
+        else Alert.alert('Validation Error', 'Please select a product image file');
         return;
       }
       payload = {
         ...payload,
-        title: title.trim(),
         name: title.trim(),
+        title: title.trim(),
+        image: image,
+        brand: brand.trim() || 'Fresh',
+        category: category.trim() || 'Grocery',
         price: parseFloat(price),
         oldPrice: oldPrice ? parseFloat(oldPrice) : null,
         unit: unit.trim() || '1 unit',
+        rating: rating.trim() || '4.5',
+        reviewsCount: reviewsCount.trim() || '100+ reviews',
+        description: description.trim() || 'Fresh and high-grade grocery product.',
       };
     }
 
     try {
       if (editingId) {
         await updateDoc(doc(db, activeSection, editingId), payload);
-        Alert.alert('Success', 'Item updated successfully!');
       } else {
         await addDoc(collection(db, activeSection), {
           ...payload,
           createdAt: serverTimestamp(),
         });
-        Alert.alert('Success', 'Item added successfully!');
       }
-      resetProductForm();
+      setModalVisible(false);
+      resetForm();
     } catch (err) {
-      Alert.alert('Error', err.message);
+      if (Platform.OS === 'web') alert('Error: ' + err.message);
+      else Alert.alert('Error', err.message);
+    } finally {
+      setSavingProduct(false);
+      setLoadingMessage('');
     }
   };
 
-  const handleEditProduct = (item) => {
-    setEditingId(item.id);
-    setImage(item.image || '');
-    if (activeSection === 'featuredStores') {
-      setTitle(item.name || '');
-      setTag(item.tag || '');
-      setRating(String(item.rating || ''));
-      setDeliveryTime(item.deliveryTime || '');
-    } else {
-      setTitle(item.title || item.name || '');
-      setPrice(String(item.price || ''));
-      setOldPrice(item.oldPrice ? String(item.oldPrice) : '');
-      setUnit(item.unit || '');
-    }
-  };
-
-  const handleDeleteProduct = (id) => {
-    Alert.alert('Confirm Delete', 'Delete this item permanently?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteDoc(doc(db, activeSection, id));
-          } catch (err) {
-            Alert.alert('Error', err.message);
-          }
-        },
-      },
-    ]);
-  };
-
-  // Profile Save
-  const handleSaveProfile = async () => {
+  const executeDelete = async (id) => {
     try {
-      if (auth.currentUser) {
-        await updateProfile(auth.currentUser, {
-          displayName: profileName,
+      await deleteDoc(doc(db, activeSection, id));
+    } catch (err) {
+      if (Platform.OS === 'web') alert('Delete Failed: ' + err.message);
+      else Alert.alert('Delete Failed', err.message);
+    }
+  };
+
+  const handleDelete = (id) => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Delete this record permanently?')) {
+        executeDelete(id);
+      }
+    } else {
+      Alert.alert('Delete Confirmation', 'Delete this record permanently?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => executeDelete(id) },
+      ]);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    setLoadingMessage('Saving store settings...');
+    try {
+      if (currentUser) {
+        await updateProfile(currentUser, {
+          displayName: profileData.name,
         });
       }
+      if (db && currentUser?.uid) {
+        await setDoc(
+          doc(db, 'adminSettings', currentUser.uid),
+          {
+            ...profileData,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
       setIsEditingProfile(false);
-      Alert.alert('Profile Updated', 'Admin details have been saved.');
+      if (Platform.OS === 'web') alert('Profile & Settings saved successfully!');
+      else Alert.alert('Saved', 'Profile & Settings saved successfully!');
     } catch (err) {
-      Alert.alert('Error', err.message);
+      if (Platform.OS === 'web') alert('Error: ' + err.message);
+      else Alert.alert('Error', err.message);
+    } finally {
+      setSavingProfile(false);
+      setLoadingMessage('');
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      Alert.alert('Sign Out Error', err.message);
+    }
+  };
+
+  const filteredItems = items.filter((it) =>
+    (it.title || it.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
-      
+    <View style={styles.container}>
+      {/* Full-Screen Loading Feedback */}
+      <Modal
+        transparent={true}
+        animationType="fade"
+        visible={uploadingImage || savingProduct || savingProfile}
+      >
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingTitle}>{loadingMessage || 'Processing Request...'}</Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* Top Header */}
       <View style={styles.topHeader}>
         <View>
-          <Text style={styles.headerTitle}>Management Hub</Text>
-          <Text style={styles.headerSub}>Admin Portal • Instacart Store</Text>
+          <Text style={styles.headerTitle}>Store Hub</Text>
+          <Text style={styles.headerSub}>Control Panel & Real-time Catalog</Text>
         </View>
         <TouchableOpacity style={styles.profileChip} onPress={() => setActiveMainTab('Profile')}>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120' }}
-            style={styles.avatarMini}
-          />
-          <Text style={styles.profileChipText}>Admin</Text>
+          <Image source={{ uri: profileData.avatar }} style={styles.avatarMini} />
+          <Text style={styles.profileChipText}>{profileData.name.split(' ')[0]}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Main Feature Tabs */}
+      {/* Main Tabs Navigation */}
       <View style={styles.navTabs}>
         {['Overview', 'Products', 'Orders', 'Profile'].map((tab) => (
           <TouchableOpacity
@@ -214,361 +414,577 @@ export default function DashboardScreen() {
         ))}
       </View>
 
-      {/* TAB 1: OVERVIEW & ANALYTICS */}
-      {activeMainTab === 'Overview' && (
-        <View>
-          <View style={styles.kpiGrid}>
-            <View style={[styles.kpiCard, { backgroundColor: '#E8F5E9' }]}>
-              <MaterialCommunityIcons name="currency-inr" size={26} color="#2E7D32" />
-              <Text style={styles.kpiVal}>₹1,24,500</Text>
-              <Text style={styles.kpiTxt}>Total Revenue</Text>
-            </View>
-            <View style={[styles.kpiCard, { backgroundColor: '#E3F2FD' }]}>
-              <Ionicons name="cart" size={26} color="#1565C0" />
-              <Text style={styles.kpiVal}>428</Text>
-              <Text style={styles.kpiTxt}>Total Orders</Text>
-            </View>
-          </View>
-
-          <View style={styles.kpiGrid}>
-            <View style={[styles.kpiCard, { backgroundColor: '#FFF3E0' }]}>
-              <Ionicons name="people" size={26} color="#E65100" />
-              <Text style={styles.kpiVal}>3,420</Text>
-              <Text style={styles.kpiTxt}>Customers</Text>
-            </View>
-            <View style={[styles.kpiCard, { backgroundColor: '#F3E5F5' }]}>
-              <MaterialCommunityIcons name="storefront" size={26} color="#7B1FA2" />
-              <Text style={styles.kpiVal}>18</Text>
-              <Text style={styles.kpiTxt}>Partner Outlets</Text>
-            </View>
-          </View>
-
-          {/* Quick Actions */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeading}>Quick Controls</Text>
-            <View style={styles.quickActions}>
-              <TouchableOpacity style={styles.actionPill} onPress={() => { setActiveMainTab('Products'); setActiveSection('flashSale'); }}>
-                <Ionicons name="flash" size={18} color={colors.primary} />
-                <Text style={styles.actionPillText}>Flash Sale</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionPill} onPress={() => { setActiveMainTab('Products'); setActiveSection('featuredStores'); }}>
-                <Ionicons name="business" size={18} color={colors.primary} />
-                <Text style={styles.actionPillText}>Add Store</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionPill} onPress={() => setActiveMainTab('Orders')}>
-                <Ionicons name="receipt" size={18} color={colors.primary} />
-                <Text style={styles.actionPillText}>Orders (4)</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* TAB 2: PRODUCTS & CRUD ACCORDION */}
+      {/* 1. PRODUCTS TAB */}
       {activeMainTab === 'Products' && (
-        <View>
-          {/* Sub Section Select */}
-          <View style={styles.subTabs}>
-            {SECTIONS.map((sec) => (
-              <TouchableOpacity
-                key={sec.key}
-                style={[styles.subTabBtn, activeSection === sec.key && styles.subTabBtnActive]}
-                onPress={() => setActiveSection(sec.key)}
-              >
-                <Text style={[styles.subTabText, activeSection === sec.key && styles.subTabTextActive]}>
-                  {sec.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Create / Edit Form */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeading}>
-              {editingId ? 'Edit Record' : 'Add New'} ({SECTIONS.find((s) => s.key === activeSection)?.label})
-            </Text>
-
-            <TextInput
-              placeholder={activeSection === 'featuredStores' ? 'Store Name' : 'Product Name'}
-              value={title}
-              onChangeText={setTitle}
-              style={styles.input}
-            />
-
-            <TextInput
-              placeholder="Image URL (https://...)"
-              value={image}
-              onChangeText={setImage}
-              style={styles.input}
-            />
-
-            {activeSection === 'featuredStores' ? (
-              <>
-                <TextInput
-                  placeholder="Tag (e.g. Supermarket, Organic)"
-                  value={tag}
-                  onChangeText={setTag}
-                  style={styles.input}
-                />
-                <View style={styles.inputRow}>
-                  <TextInput
-                    placeholder="Rating (4.8)"
-                    value={rating}
-                    onChangeText={setRating}
-                    keyboardType="numeric"
-                    style={[styles.input, { flex: 1 }]}
-                  />
-                  <TextInput
-                    placeholder="Delivery Time (20-30 min)"
-                    value={deliveryTime}
-                    onChangeText={setDeliveryTime}
-                    style={[styles.input, { flex: 1 }]}
-                  />
-                </View>
-              </>
-            ) : (
-              <>
-                <View style={styles.inputRow}>
-                  <TextInput
-                    placeholder="Price (₹)"
-                    value={price}
-                    onChangeText={setPrice}
-                    keyboardType="numeric"
-                    style={[styles.input, { flex: 1 }]}
-                  />
-                  <TextInput
-                    placeholder="Old Price (₹ opt)"
-                    value={oldPrice}
-                    onChangeText={setOldPrice}
-                    keyboardType="numeric"
-                    style={[styles.input, { flex: 1 }]}
-                  />
-                </View>
-                <TextInput
-                  placeholder="Unit (e.g. 1 kg, 500 ml)"
-                  value={unit}
-                  onChangeText={setUnit}
-                  style={styles.input}
-                />
-              </>
-            )}
-
-            <View style={styles.btnRow}>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProduct}>
-                <Text style={styles.saveBtnText}>{editingId ? 'Update Item' : 'Add to Catalog'}</Text>
-              </TouchableOpacity>
-              {editingId && (
-                <TouchableOpacity style={styles.cancelBtn} onPress={resetProductForm}>
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
+        <View style={{ flex: 1 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.subTabsScroll}
+            contentContainerStyle={{ paddingRight: 16 }}
+          >
+            {SECTIONS.map((sec) => {
+              const isActive = activeSection === sec.key;
+              return (
+                <TouchableOpacity
+                  key={sec.key}
+                  style={[styles.subTabPill, isActive && styles.subTabPillActive]}
+                  onPress={() => {
+                    setActiveSection(sec.key);
+                    setSearchQuery('');
+                  }}
+                >
+                  <Ionicons name={sec.icon} size={15} color={isActive ? '#fff' : colors.textDark} />
+                  <Text style={[styles.subTabPillText, isActive && styles.subTabPillTextActive]}>
+                    {sec.label}
+                  </Text>
                 </TouchableOpacity>
-              )}
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.actionRow}>
+            <View style={styles.searchBox}>
+              <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+              <TextInput
+                placeholder={`Search in ${SECTIONS.find((s) => s.key === activeSection)?.label}...`}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                style={styles.searchInput}
+              />
             </View>
+            <TouchableOpacity style={styles.addPrimaryBtn} onPress={handleOpenAddModal}>
+              <Ionicons name="add" size={18} color="#fff" />
+              <Text style={styles.addPrimaryBtnText}>New</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Records List */}
-          <Text style={styles.sectionTitle}>Active Inventory ({items.length})</Text>
+          <View style={styles.listHeaderRow}>
+            <Text style={styles.listHeaderTitle}>
+              {SECTIONS.find((s) => s.key === activeSection)?.label} Catalog
+            </Text>
+            <Text style={styles.listHeaderCount}>{filteredItems.length} Records</Text>
+          </View>
+
           {loadingItems ? (
-            <ActivityIndicator size="small" color={colors.primary} />
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 30 }} />
           ) : (
-            items.map((item) => (
-              <View key={item.id} style={styles.itemRow}>
-                <Image source={{ uri: item.image }} style={styles.itemThumb} />
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text numberOfLines={1} style={styles.itemTitle}>{item.title || item.name}</Text>
-                  {activeSection === 'featuredStores' ? (
-                    <Text style={styles.itemSub}>{item.tag} • ⭐ {item.rating} • {item.deliveryTime}</Text>
-                  ) : (
-                    <Text style={styles.itemSub}>₹{item.price} • {item.unit}</Text>
-                  )}
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+              {filteredItems.length === 0 ? (
+                <View style={styles.emptyCard}>
+                  <Ionicons name="cube-outline" size={44} color="#D1D5DB" />
+                  <Text style={styles.emptyTitle}>No entries found</Text>
+                  <Text style={styles.emptySub}>Tap "+ New" button to add an item.</Text>
                 </View>
-                <View style={styles.actionIcons}>
-                  <TouchableOpacity onPress={() => handleEditProduct(item)} style={styles.iconEdit}>
-                    <Ionicons name="pencil" size={14} color="#2E7D32" />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDeleteProduct(item.id)} style={styles.iconDelete}>
-                    <Ionicons name="trash" size={14} color="#C62828" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
+              ) : (
+                filteredItems.map((item) => (
+                  <View key={item.id} style={styles.catalogCard}>
+                    {activeSection === 'browseCategories' ? (
+                      <View style={[styles.catIconBox, { backgroundColor: item.bgColor || '#FFF3E0' }]}>
+                        <MaterialCommunityIcons name={item.icon || 'basket'} size={22} color={colors.primary} />
+                      </View>
+                    ) : (
+                      <Image source={{ uri: item.image }} style={styles.itemThumb} />
+                    )}
+
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemTitle} numberOfLines={1}>
+                        {item.name || item.title}
+                      </Text>
+                      <Text style={styles.itemMeta}>
+                        {activeSection === 'browseCategories'
+                          ? item.count
+                          : activeSection === 'featuredStores'
+                          ? `${item.tag} • ⭐ ${item.rating}`
+                          : `₹${item.price} • ${item.unit || '1 unit'}`}
+                      </Text>
+                    </View>
+
+                    <View style={styles.cardActions}>
+                      <TouchableOpacity style={styles.editPill} onPress={() => handleOpenEditModal(item)}>
+                        <Ionicons name="pencil" size={14} color="#166534" />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.deletePill} onPress={() => handleDelete(item.id)}>
+                        <Ionicons name="trash-outline" size={14} color="#991B1B" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
           )}
         </View>
       )}
 
-      {/* TAB 3: ORDERS MANAGEMENT */}
+      {/* 2. OVERVIEW TAB */}
+      {activeMainTab === 'Overview' && (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+          <View style={styles.kpiGrid}>
+            <View style={[styles.kpiCard, { backgroundColor: '#E8F5E9' }]}>
+              <MaterialCommunityIcons name="currency-inr" size={24} color="#2E7D32" />
+              <Text style={styles.kpiVal}>₹1,24,500</Text>
+              <Text style={styles.kpiTxt}>Total Revenue</Text>
+            </View>
+            <View style={[styles.kpiCard, { backgroundColor: '#E3F2FD' }]}>
+              <Ionicons name="cart-outline" size={24} color="#1565C0" />
+              <Text style={styles.kpiVal}>428</Text>
+              <Text style={styles.kpiTxt}>Total Orders</Text>
+            </View>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* 3. ORDERS TAB */}
       {activeMainTab === 'Orders' && (
-        <View>
-          <Text style={styles.sectionTitle}>Incoming & Active Orders</Text>
-          
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+          <Text style={styles.listHeaderTitle}>Active Customer Orders (2)</Text>
           {[
             { id: 'ORD-9812', user: 'Rahul Verma', total: 450, items: 3, status: 'Processing', color: '#F57C00' },
             { id: 'ORD-9811', user: 'Pooja Singh', total: 1120, items: 7, status: 'Shipped', color: '#1976D2' },
-            { id: 'ORD-9810', user: 'Amit Sharma', total: 290, items: 2, status: 'Delivered', color: '#388E3C' },
-          ].map((order) => (
-            <View key={order.id} style={styles.orderCard}>
+          ].map((ord) => (
+            <View key={ord.id} style={styles.orderCard}>
               <View style={styles.orderTop}>
                 <View>
-                  <Text style={styles.orderIdText}>{order.id}</Text>
-                  <Text style={styles.orderCustomer}>{order.user} • {order.items} Items</Text>
+                  <Text style={styles.orderId}>{ord.id}</Text>
+                  <Text style={styles.orderUser}>{ord.user} • {ord.items} Items</Text>
                 </View>
-                <View style={[styles.statusTag, { backgroundColor: `${order.color}15` }]}>
-                  <Text style={[styles.statusText, { color: order.color }]}>{order.status}</Text>
+                <View style={[styles.orderBadge, { backgroundColor: `${ord.color}15` }]}>
+                  <Text style={[styles.orderBadgeText, { color: ord.color }]}>{ord.status}</Text>
                 </View>
               </View>
-              <View style={styles.orderDivider} />
               <View style={styles.orderBottom}>
-                <Text style={styles.orderTotal}>Amount: ₹{order.total}</Text>
-                <TouchableOpacity
-                  style={styles.orderActionBtn}
-                  onPress={() => Alert.alert('Action', `Update status for ${order.id}`)}
-                >
-                  <Text style={styles.orderActionText}>Update Status</Text>
+                <Text style={styles.orderTotal}>₹{ord.total}.00</Text>
+                <TouchableOpacity style={styles.orderActionBtn} onPress={() => alert(`Status updated for ${ord.id}`)}>
+                  <Text style={styles.orderActionBtnText}>Update</Text>
                 </TouchableOpacity>
               </View>
             </View>
           ))}
-        </View>
+        </ScrollView>
       )}
 
-      {/* TAB 4: PROFILE VIEW & EDIT */}
+      {/* 4. PROFILE & STORE SETTINGS */}
       {activeMainTab === 'Profile' && (
-        <View>
-          <View style={styles.profileHeaderCard}>
-            <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300' }}
-              style={styles.profileAvatarLarge}
-            />
-            <Text style={styles.profileNameText}>{profileName}</Text>
-            <Text style={styles.profileRoleText}>Super Admin / Owner</Text>
-          </View>
-
-          <View style={styles.card}>
-            <View style={styles.profileCardTop}>
-              <Text style={styles.cardHeading}>Account Information</Text>
-              <TouchableOpacity onPress={() => setIsEditingProfile(!isEditingProfile)}>
-                <Text style={styles.editToggleText}>{isEditingProfile ? 'Cancel' : 'Edit Details'}</Text>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+          <View style={styles.profileHeroCard}>
+            <View style={styles.avatarWrapper}>
+              <Image source={{ uri: profileData.avatar }} style={styles.profileImage} />
+              <TouchableOpacity
+                style={styles.changeAvatarBtn}
+                onPress={() => handlePickFile(true)}
+              >
+                <Ionicons name="camera" size={14} color="#fff" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.formGroup}>
+            <Text style={styles.adminName}>{profileData.name}</Text>
+            <Text style={styles.storeTaglineText}>{profileData.storeName}</Text>
+
+            <TouchableOpacity
+              style={[styles.editToggleBtn, isEditingProfile && styles.editToggleBtnActive]}
+              onPress={() => setIsEditingProfile(!isEditingProfile)}
+            >
+              <Ionicons
+                name={isEditingProfile ? 'close-circle-outline' : 'create-outline'}
+                size={16}
+                color={isEditingProfile ? '#DC2626' : colors.primary}
+              />
+              <Text style={[styles.editToggleBtnText, isEditingProfile && { color: '#DC2626' }]}>
+                {isEditingProfile ? 'Cancel Editing' : 'Edit Profile & Settings'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {isEditingProfile ? (
+            <View style={styles.card}>
+              <Text style={styles.cardHeaderTitle}>Personal Info</Text>
+
               <Text style={styles.label}>Full Name</Text>
               <TextInput
-                value={profileName}
-                onChangeText={setProfileName}
-                editable={isEditingProfile}
-                style={[styles.input, !isEditingProfile && styles.inputDisabled]}
+                value={profileData.name}
+                onChangeText={(t) => setProfileData({ ...profileData, name: t })}
+                style={styles.input}
               />
-            </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Email Address</Text>
-              <TextInput
-                value={profileEmail}
-                onChangeText={setProfileEmail}
-                editable={false}
-                style={[styles.input, styles.inputDisabled]}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
               <Text style={styles.label}>Support Phone</Text>
               <TextInput
-                value={profilePhone}
-                onChangeText={setProfilePhone}
-                editable={isEditingProfile}
-                style={[styles.input, !isEditingProfile && styles.inputDisabled]}
+                value={profileData.phone}
+                onChangeText={(t) => setProfileData({ ...profileData, phone: t })}
+                style={styles.input}
+                keyboardType="phone-pad"
               />
-            </View>
 
-            {isEditingProfile && (
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile}>
-                <Text style={styles.saveBtnText}>Save Profile Changes</Text>
+              <Text style={[styles.cardHeaderTitle, { marginTop: 14 }]}>Store Settings</Text>
+
+              <Text style={styles.label}>Store Name</Text>
+              <TextInput
+                value={profileData.storeName}
+                onChangeText={(t) => setProfileData({ ...profileData, storeName: t })}
+                style={styles.input}
+              />
+
+              <Text style={styles.label}>Warehouse Address</Text>
+              <TextInput
+                value={profileData.address}
+                onChangeText={(t) => setProfileData({ ...profileData, address: t })}
+                style={[styles.input, { height: 60, textAlignVertical: 'top' }]}
+                multiline
+              />
+
+              <TouchableOpacity
+                style={styles.saveSubmitBtn}
+                onPress={handleSaveProfile}
+                disabled={savingProfile}
+              >
+                {savingProfile ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.saveSubmitBtnText}>Save All Settings</Text>
+                )}
               </TouchableOpacity>
-            )}
-          </View>
+            </View>
+          ) : (
+            <>
+              <View style={styles.card}>
+                <Text style={styles.cardHeaderTitle}>Live Store Controls</Text>
+                <View style={styles.switchRow}>
+                  <View style={styles.switchLabelWrap}>
+                    <Ionicons name="storefront-outline" size={20} color={colors.primary} />
+                    <View>
+                      <Text style={styles.switchTitle}>Accepting Orders</Text>
+                      <Text style={styles.switchSubtitle}>Toggle store online/offline</Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={profileData.isStoreOpen}
+                    onValueChange={(val) => {
+                      setProfileData({ ...profileData, isStoreOpen: val });
+                      if (db && currentUser?.uid) {
+                        setDoc(
+                          doc(db, 'adminSettings', currentUser.uid),
+                          { isStoreOpen: val },
+                          { merge: true }
+                        );
+                      }
+                    }}
+                    trackColor={{ false: '#D1D5DB', true: '#BBF7D0' }}
+                    thumbColor={profileData.isStoreOpen ? colors.primary : '#9CA3AF'}
+                  />
+                </View>
+              </View>
 
-          {/* Security & System Info */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeading}>System Info</Text>
-            <Text style={styles.systemInfoText}>Version: 1.0.0 (Production Build)</Text>
-            <Text style={styles.systemInfoText}>Database: Google Firebase Cloud</Text>
-            <Text style={styles.systemInfoText}>Environment: Expo Managed App</Text>
-          </View>
-        </View>
+              <TouchableOpacity style={styles.logoutBtn} onPress={handleSignOut}>
+                <Ionicons name="log-out-outline" size={18} color="#DC2626" />
+                <Text style={styles.logoutBtnText}>Sign Out from Console</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </ScrollView>
       )}
 
-    </ScrollView>
+      {/* POPUP MODAL WITH FILE PICKER */}
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {editingId ? 'Edit Entry' : 'Add New Entry'} ({SECTIONS.find((s) => s.key === activeSection)?.label})
+              </Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={20} color="#374151" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              
+              {/* IMAGE FILE PICKER */}
+              {activeSection !== 'browseCategories' && (
+                <View style={styles.filePickerContainer}>
+                  <Text style={styles.inputLabel}>Product / Store Image File *</Text>
+                  
+                  <TouchableOpacity
+                    style={styles.fileUploadBox}
+                    onPress={() => handlePickFile(false)}
+                  >
+                    {image ? (
+                      <View style={styles.previewWrap}>
+                        <Image source={{ uri: image }} style={styles.pickedImagePreview} />
+                        <View style={styles.changeOverlay}>
+                          <Ionicons name="camera-reverse-outline" size={16} color="#fff" />
+                          <Text style={styles.changeOverlayText}>Change Image</Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.placeholderBox}>
+                        <Ionicons name="cloud-upload-outline" size={32} color={colors.primary} />
+                        <Text style={styles.uploadBoxTitle}>Tap to Choose File from Device</Text>
+                        <Text style={styles.uploadBoxSub}>Instant Upload to Cloud</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <Text style={styles.inputLabel}>Title / Name *</Text>
+              <TextInput
+                placeholder="Product or Store Title"
+                value={title}
+                onChangeText={setTitle}
+                style={styles.modalInput}
+              />
+
+              {activeSection === 'browseCategories' ? (
+                <>
+                  <Text style={styles.inputLabel}>Items Count Label</Text>
+                  <TextInput
+                    placeholder="e.g. 1,240 items"
+                    value={countLabel}
+                    onChangeText={setCountLabel}
+                    style={styles.modalInput}
+                  />
+                  <View style={styles.inputRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputLabel}>Icon Name</Text>
+                      <TextInput
+                        placeholder="basket, egg, food"
+                        value={iconName}
+                        onChangeText={setIconName}
+                        style={styles.modalInput}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputLabel}>Background Color</Text>
+                      <TextInput
+                        placeholder="#FFF3E0"
+                        value={bgColor}
+                        onChangeText={setBgColor}
+                        style={styles.modalInput}
+                      />
+                    </View>
+                  </View>
+                </>
+              ) : activeSection === 'featuredStores' ? (
+                <>
+                  <Text style={styles.inputLabel}>Category Tag</Text>
+                  <TextInput
+                    placeholder="Supermarket, Organic"
+                    value={tag}
+                    onChangeText={setTag}
+                    style={styles.modalInput}
+                  />
+                  <View style={styles.inputRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputLabel}>Rating</Text>
+                      <TextInput
+                        placeholder="4.8"
+                        value={rating}
+                        onChangeText={setRating}
+                        keyboardType="numeric"
+                        style={styles.modalInput}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputLabel}>Delivery Time</Text>
+                      <TextInput
+                        placeholder="20 min"
+                        value={deliveryTime}
+                        onChangeText={setDeliveryTime}
+                        style={styles.modalInput}
+                      />
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.inputRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputLabel}>Brand</Text>
+                      <TextInput
+                        placeholder="Brand Name"
+                        value={brand}
+                        onChangeText={setBrand}
+                        style={styles.modalInput}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputLabel}>Category Tag</Text>
+                      <TextInput
+                        placeholder="Grocery, Bakery"
+                        value={category}
+                        onChangeText={setCategory}
+                        style={styles.modalInput}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.inputRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputLabel}>Selling Price (₹) *</Text>
+                      <TextInput
+                        placeholder="₹ Price"
+                        value={price}
+                        onChangeText={setPrice}
+                        keyboardType="numeric"
+                        style={styles.modalInput}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputLabel}>MRP Price (₹ opt)</Text>
+                      <TextInput
+                        placeholder="Original Price"
+                        value={oldPrice}
+                        onChangeText={setOldPrice}
+                        keyboardType="numeric"
+                        style={styles.modalInput}
+                      />
+                    </View>
+                  </View>
+
+                  <Text style={styles.inputLabel}>Unit / Weight</Text>
+                  <TextInput
+                    placeholder="1 kg, 500 ml, 1 unit"
+                    value={unit}
+                    onChangeText={setUnit}
+                    style={styles.modalInput}
+                  />
+
+                  <Text style={styles.inputLabel}>Description</Text>
+                  <TextInput
+                    placeholder="Product details..."
+                    value={description}
+                    onChangeText={setDescription}
+                    multiline
+                    numberOfLines={2}
+                    style={[styles.modalInput, { height: 60, textAlignVertical: 'top' }]}
+                  />
+                </>
+              )}
+
+              <TouchableOpacity style={styles.saveSubmitBtn} onPress={handleSaveProduct}>
+                <Text style={styles.saveSubmitBtnText}>
+                  {editingId ? 'Update in Cloud' : 'Publish to Live App'}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA', padding: 16 },
-  topHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: colors.primary },
-  headerSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  profileChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 6, borderRadius: 20, borderWidth: 1, borderColor: '#E5E7EB', gap: 6 },
+  container: { flex: 1, backgroundColor: '#F8F9FA', paddingHorizontal: 16, paddingTop: 10 },
+  topHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: colors.primary },
+  headerSub: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  profileChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 4, paddingRight: 10, borderRadius: 20, borderWidth: 1, borderColor: '#E5E7EB', gap: 6 },
   avatarMini: { width: 26, height: 26, borderRadius: 13 },
-  profileChipText: { fontSize: 12, fontWeight: '700', color: colors.primary, paddingRight: 4 },
-  
-  navTabs: { flexDirection: 'row', backgroundColor: '#E5E7EB', borderRadius: 12, padding: 4, marginBottom: 18 },
-  navTabBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8 },
-  navTabBtnActive: { backgroundColor: '#fff', elevation: 2 },
-  navTabText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
+  profileChipText: { fontSize: 12, fontWeight: '700', color: colors.primary },
+
+  navTabs: { flexDirection: 'row', backgroundColor: '#E5E7EB', borderRadius: 10, padding: 3, marginBottom: 12 },
+  navTabBtn: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 8 },
+  navTabBtnActive: { backgroundColor: '#fff', elevation: 1 },
+  navTabText: { fontSize: 11, fontWeight: '600', color: '#6B7280' },
   navTabTextActive: { color: colors.primary, fontWeight: '800' },
 
-  kpiGrid: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  kpiCard: { flex: 1, padding: 14, borderRadius: 14, alignItems: 'center' },
-  kpiVal: { fontSize: 18, fontWeight: '800', color: colors.textDark, marginTop: 6 },
+  subTabsScroll: { maxHeight: 40, marginBottom: 10 },
+  subTabPill: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#fff', borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: '#E5E7EB', gap: 5 },
+  subTabPillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  subTabPillText: { fontSize: 11, fontWeight: '600', color: colors.textDark },
+  subTabPillTextActive: { color: '#fff', fontWeight: '700' },
+
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 10, height: 40, borderWidth: 1, borderColor: '#E5E7EB', gap: 6 },
+  searchInput: { flex: 1, fontSize: 12, color: colors.textDark },
+  addPrimaryBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, height: 40, paddingHorizontal: 14, borderRadius: 10, gap: 4 },
+  addPrimaryBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  listHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  listHeaderTitle: { fontSize: 13, fontWeight: '700', color: colors.textDark },
+  listHeaderCount: { fontSize: 11, color: colors.textMuted },
+
+  catalogCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 10, borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: '#EFEFEF', elevation: 1 },
+  itemThumb: { width: 44, height: 44, borderRadius: 8, backgroundColor: '#eee' },
+  catIconBox: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  itemInfo: { flex: 1, marginLeft: 10 },
+  itemTitle: { fontSize: 13, fontWeight: '700', color: colors.textDark },
+  itemMeta: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  cardActions: { flexDirection: 'row', gap: 6 },
+  editPill: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#DCFCE7', justifyContent: 'center', alignItems: 'center' },
+  deletePill: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#FEE2E2', justifyContent: 'center', alignItems: 'center' },
+
+  emptyCard: { backgroundColor: '#fff', borderRadius: 14, padding: 30, alignItems: 'center', borderWidth: 1, borderColor: '#EFEFEF', marginTop: 20 },
+  emptyTitle: { fontSize: 14, fontWeight: '700', color: colors.textDark },
+  emptySub: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+
+  kpiGrid: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  kpiCard: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center' },
+  kpiVal: { fontSize: 18, fontWeight: '800', color: colors.textDark, marginTop: 4 },
   kpiTxt: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
 
-  card: { backgroundColor: '#fff', padding: 16, borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB', elevation: 1 },
-  cardHeading: { fontSize: 15, fontWeight: '800', color: colors.textDark, marginBottom: 12 },
-  quickActions: { flexDirection: 'row', gap: 10 },
-  actionPill: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0', paddingVertical: 10, borderRadius: 8, gap: 6 },
-  actionPillText: { fontSize: 12, fontWeight: '700', color: colors.primary },
-
-  subTabs: { flexDirection: 'row', backgroundColor: '#E5E7EB', borderRadius: 8, padding: 3, marginBottom: 14 },
-  subTabBtn: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 6 },
-  subTabBtnActive: { backgroundColor: '#fff' },
-  subTabText: { fontSize: 11, fontWeight: '600', color: '#6B7280' },
-  subTabTextActive: { color: colors.primary, fontWeight: '700' },
-
-  input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, marginBottom: 10 },
-  inputDisabled: { backgroundColor: '#F3F4F6', color: '#9CA3AF' },
-  inputRow: { flexDirection: 'row', gap: 10 },
-  btnRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  saveBtn: { flex: 1, backgroundColor: colors.primary, padding: 12, borderRadius: 8, alignItems: 'center' },
-  saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  cancelBtn: { backgroundColor: '#E5E7EB', padding: 12, borderRadius: 8, alignItems: 'center', paddingHorizontal: 16 },
-  cancelBtnText: { color: '#374151', fontWeight: '700' },
-
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: colors.textDark, marginBottom: 10 },
-  itemRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 10, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: '#E5E7EB' },
-  itemThumb: { width: 44, height: 44, borderRadius: 8, backgroundColor: '#eee' },
-  itemTitle: { fontSize: 14, fontWeight: '700', color: colors.textDark },
-  itemSub: { fontSize: 12, color: '#6B7280', marginTop: 2 },
-  actionIcons: { flexDirection: 'row', gap: 6 },
-  iconEdit: { backgroundColor: '#DCFCE7', padding: 8, borderRadius: 6 },
-  iconDelete: { backgroundColor: '#FEE2E2', padding: 8, borderRadius: 6 },
-
-  orderCard: { backgroundColor: '#fff', padding: 14, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E5E7EB' },
+  orderCard: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#EFEFEF' },
   orderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  orderIdText: { fontSize: 14, fontWeight: '800', color: colors.textDark },
-  orderCustomer: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  statusTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  statusText: { fontSize: 11, fontWeight: '700' },
-  orderDivider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 10 },
-  orderBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  orderTotal: { fontSize: 14, fontWeight: '800', color: colors.primary },
-  orderActionBtn: { backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  orderActionText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  profileHeaderCard: { backgroundColor: '#fff', alignItems: 'center', padding: 20, borderRadius: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB' },
-  profileAvatarLarge: { width: 80, height: 80, borderRadius: 40, marginBottom: 10 },
-  profileNameText: { fontSize: 18, fontWeight: '800', color: colors.textDark },
-  profileRoleText: { fontSize: 12, color: colors.primary, fontWeight: '600', marginTop: 2 },
-  profileCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  editToggleText: { fontSize: 12, fontWeight: '700', color: colors.primary },
-  formGroup: { marginBottom: 10 },
-  label: { fontSize: 12, fontWeight: '600', color: '#4B5563', marginBottom: 4 },
-  systemInfoText: { fontSize: 12, color: '#6B7280', marginVertical: 2 },
+  orderId: { fontSize: 13, fontWeight: '700', color: colors.textDark },
+  orderBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  orderBadgeText: { fontSize: 10, fontWeight: '700' },
+  orderUser: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
+  orderBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  orderTotal: { fontSize: 13, fontWeight: '800', color: colors.primary },
+  orderActionBtn: { backgroundColor: colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  orderActionBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+
+  profileHeroCard: { backgroundColor: '#fff', borderRadius: 20, padding: 22, alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB', elevation: 2 },
+  avatarWrapper: { position: 'relative', marginBottom: 10 },
+  profileImage: { width: 84, height: 84, borderRadius: 42, borderWidth: 3, borderColor: '#F0FDF4' },
+  changeAvatarBtn: { position: 'absolute', bottom: 0, right: 0, backgroundColor: colors.primary, width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
+  adminName: { fontSize: 18, fontWeight: '800', color: colors.textDark },
+  storeTaglineText: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  editToggleBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 16, gap: 5, marginTop: 10 },
+  editToggleBtnActive: { backgroundColor: '#FEE2E2' },
+  editToggleBtnText: { fontSize: 11, fontWeight: '700', color: colors.primary },
+
+  card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB' },
+  cardHeaderTitle: { fontSize: 13, fontWeight: '800', color: colors.textDark, marginBottom: 10 },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  switchLabelWrap: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  switchTitle: { fontSize: 13, fontWeight: '700', color: colors.textDark },
+  switchSubtitle: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  label: { fontSize: 11, fontWeight: '700', color: '#4B5563', marginBottom: 4, marginTop: 6 },
+  input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 10, height: 38, fontSize: 12, color: colors.textDark, marginBottom: 6 },
+  logoutBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: '#FEF2F2', paddingVertical: 12, borderRadius: 12, gap: 6, marginTop: 6 },
+  logoutBtnText: { color: '#DC2626', fontSize: 12, fontWeight: '700' },
+
+  // Modal Sheet & File Picker UI
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18, maxHeight: '85%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  modalTitle: { fontSize: 15, fontWeight: '800', color: colors.textDark },
+  modalCloseBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+  
+  filePickerContainer: { marginBottom: 12 },
+  fileUploadBox: { backgroundColor: '#F9FAFB', borderWidth: 1.5, borderColor: '#D1D5DB', borderStyle: 'dashed', borderRadius: 12, minHeight: 110, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  placeholderBox: { alignItems: 'center', padding: 14 },
+  uploadBoxTitle: { fontSize: 12, fontWeight: '700', color: colors.primary, marginTop: 6 },
+  uploadBoxSub: { fontSize: 10, color: colors.textMuted, marginTop: 2 },
+  previewWrap: { width: '100%', height: 130, position: 'relative' },
+  pickedImagePreview: { width: '100%', height: 130 },
+  changeOverlay: { position: 'absolute', bottom: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.65)', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, gap: 4 },
+  changeOverlayText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+
+  inputLabel: { fontSize: 11, fontWeight: '700', color: '#4B5563', marginBottom: 4 },
+  modalInput: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 10, height: 38, fontSize: 12, marginBottom: 8 },
+  inputRow: { flexDirection: 'row', gap: 8 },
+  saveSubmitBtn: { backgroundColor: colors.primary, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
+  saveSubmitBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+
+  // Loading Overlay
+  loadingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  loadingCard: { backgroundColor: '#fff', padding: 24, borderRadius: 16, alignItems: 'center', width: '80%', maxWidth: 280 },
+  loadingTitle: { fontSize: 13, fontWeight: '700', color: colors.textDark, marginTop: 12, textAlign: 'center' },
 });

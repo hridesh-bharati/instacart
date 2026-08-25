@@ -8,7 +8,7 @@ export default function BottomNav({ activeTab, setActiveTab }) {
     { name: 'Home', icon: 'home-outline', activeIcon: 'home' },
     { name: 'Browse', icon: 'grid-outline', activeIcon: 'grid' },
     { name: 'Orders', icon: 'receipt-outline', activeIcon: 'receipt' },
-    { name: 'Dashboard', icon: 'grid-outline', activeIcon: 'grid' },
+    { name: 'Dashboard', icon: 'apps-outline', activeIcon: 'apps' },
   ];
 
   return (
@@ -18,15 +18,16 @@ export default function BottomNav({ activeTab, setActiveTab }) {
         return (
           <TouchableOpacity
             key={tab.name}
+            style={styles.tabItem}
             onPress={() => setActiveTab(tab.name)}
-            style={styles.navItem}
+            activeOpacity={0.7}
           >
             <Ionicons
               name={isActive ? tab.activeIcon : tab.icon}
               size={22}
-              color={isActive ? colors.primary : colors.textMuted}
+              color={isActive ? colors.primary : '#9E9E9E'}
             />
-            <Text style={[styles.navText, isActive && styles.activeText]}>
+            <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
               {tab.name}
             </Text>
           </TouchableOpacity>
@@ -38,27 +39,39 @@ export default function BottomNav({ activeTab, setActiveTab }) {
 
 const styles = StyleSheet.create({
   navBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 10,
-    backgroundColor: colors.cardBg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-  },
-  navItem: {
+    height: 65,
+    backgroundColor: '#ffffff',
+    flexDirection: 'row',
+    justifyContent: 'space-around',
     alignItems: 'center',
-    gap: 3,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -3 },
   },
-  navText: {
-    fontSize: 10,
-    color: colors.textMuted,
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+    borderWidth: 0,
+    outlineWidth: 0,
   },
-  activeText: {
+  tabLabel: {
+    fontSize: 11,
+    color: '#9E9E9E',
+    marginTop: 3,
+    fontWeight: '500',
+  },
+  tabLabelActive: {
     color: colors.primary,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
 });

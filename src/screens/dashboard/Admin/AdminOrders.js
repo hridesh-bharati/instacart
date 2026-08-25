@@ -1,3 +1,4 @@
+// src\screens\dashboard\Admin\AdminOrders.js
 import React from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { sampleOrders } from '../../../data/mockData';
