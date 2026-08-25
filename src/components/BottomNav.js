@@ -1,14 +1,41 @@
-import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, db } from '../firebaseConfig';
 import colors from '../constants/colors';
 
 export default function BottomNav({ activeTab, setActiveTab }) {
+  const [userAvatar, setUserAvatar] = useState(
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80'
+  );
+
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        if (user.photoURL) setUserAvatar(user.photoURL);
+
+        // Firestore se live updated avatar fetch
+        if (db) {
+          const unsubDoc = onSnapshot(doc(db, 'adminSettings', user.uid), (docSnap) => {
+            if (docSnap.exists() && docSnap.data().avatar) {
+              setUserAvatar(docSnap.data().avatar);
+            }
+          });
+          return () => unsubDoc();
+        }
+      }
+    });
+
+    return () => unsubAuth();
+  }, []);
+
   const tabs = [
     { name: 'Home', icon: 'home-outline', activeIcon: 'home' },
     { name: 'Browse', icon: 'grid-outline', activeIcon: 'grid' },
     { name: 'Orders', icon: 'receipt-outline', activeIcon: 'receipt' },
-    { name: 'Dashboard', icon: 'apps-outline', activeIcon: 'apps' },
+    { name: 'Dashboard', isProfile: true },
   ];
 
   return (
@@ -22,11 +49,17 @@ export default function BottomNav({ activeTab, setActiveTab }) {
             onPress={() => setActiveTab(tab.name)}
             activeOpacity={0.7}
           >
-            <Ionicons
-              name={isActive ? tab.activeIcon : tab.icon}
-              size={22}
-              color={isActive ? colors.primary : '#9E9E9E'}
-            />
+            {tab.isProfile ? (
+              <View style={[styles.avatarWrap, isActive && styles.avatarWrapActive]}>
+                <Image source={{ uri: userAvatar }} style={styles.avatarImg} />
+              </View>
+            ) : (
+              <Ionicons
+                name={isActive ? tab.activeIcon : tab.icon}
+                size={22}
+                color={isActive ? colors.primary : '#9E9E9E'}
+              />
+            )}
             <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
               {tab.name}
             </Text>
@@ -63,6 +96,24 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderWidth: 0,
     outlineWidth: 0,
+  },
+  avatarWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarWrapActive: {
+    borderColor: colors.primary,
+    borderWidth: 2,
+  },
+  avatarImg: {
+    width: '100%',
+    height: '100%',
   },
   tabLabel: {
     fontSize: 11,
