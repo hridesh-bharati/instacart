@@ -28,6 +28,6 @@ jobs:
         run: npm install
 
       - name: Build Production APK with EAS
-        run: npx eas build --platform android --profile production --non-interactive --auto-submit=false
+        run: npx eas build --platform android --profile production --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
