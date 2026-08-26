@@ -30,7 +30,7 @@ export default function AdminSidebar({ visible, onClose, activeTab, setActiveTab
             />
             <View style={styles.adminInfo}>
               <Text style={styles.name} numberOfLines={1}>{adminProfile?.name || 'Super Admin'}</Text>
-              <Text style={styles.badge}>Instacart Admin</Text>
+              <Text style={styles.badge}>ZapStore Admin</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={colors.textDark} />

@@ -87,7 +87,7 @@ export default function ProductDetailModal({
           {/* Pricing & Ratings */}
           <View style={styles.content}>
             <View style={styles.brandRow}>
-              <Text style={styles.brandText}>{product.brand || 'Instacart Verified'}</Text>
+              <Text style={styles.brandText}>{product.brand || 'ZapStore Verified'}</Text>
               <View style={styles.ratingBadge}>
                 <Ionicons name="star" size={13} color="#fff" />
                 <Text style={styles.ratingBadgeText}>{product.rating || '4.8'}</Text>

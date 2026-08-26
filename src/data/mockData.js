@@ -111,6 +111,6 @@ export const sampleOrders = [
     status: 'Delivered',
     total: 15.8,
     itemsCount: 2,
-    store: 'Instacart Express Store',
+    store: 'ZapStore Express Store',
   },
 ];

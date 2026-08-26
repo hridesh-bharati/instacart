@@ -119,7 +119,7 @@ export default function AdminProducts() {
       : {
           title: title.trim(),
           name: title.trim(),
-          brand: brand.trim() || 'Instacart Verified',
+          brand: brand.trim() || 'ZapStore Verified',
           category: categoryTag,
           tag: categoryTag,
           price: parseFloat(price) || 0,
@@ -339,7 +339,7 @@ export default function AdminProducts() {
                 </View>
 
                 <TextInput
-                  label="Brand Name (e.g. Instacart Fresh / Amul / Haldiram)"
+                  label="Brand Name (e.g. ZapStore Fresh / Amul / Haldiram)"
                   mode="outlined"
                   value={brand}
                   onChangeText={setBrand}

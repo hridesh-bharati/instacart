@@ -20,7 +20,7 @@ export default function Header({
           <View style={styles.iconContainer}>
             <MaterialCommunityIcons name="carrot" size={22} color={colors.secondary} />
           </View>
-          <Text variant="titleLarge" style={styles.brandTitle}>instacart</Text>
+          <Text variant="titleLarge" style={styles.brandTitle}>ZapStore</Text>
         </View>
 
         <View style={styles.actionWrap}>

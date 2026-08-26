@@ -55,7 +55,7 @@ export default function AuthScreen({ onSuccess }) {
           {/* Brand Logo Row */}
           <View style={styles.logoRow}>
             <MaterialCommunityIcons name="carrot" size={30} color={colors.secondary} />
-            <Text variant="titleLarge" style={styles.brandTitle}>instacart</Text>
+            <Text variant="titleLarge" style={styles.brandTitle}>ZapStore</Text>
           </View>
 
           <Text variant="titleMedium" style={styles.heading}>

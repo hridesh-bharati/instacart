@@ -14,7 +14,7 @@ export default function AdminProfile({ user, onLogout }) {
     name: user?.displayName || 'Super Admin',
     email: user?.email || '',
     phone: '+91 7267995307',
-    storeName: 'Instacart Supermarket',
+    storeName: 'ZapStore Supermarket',
     address: 'Nichlaul, Maharajganj, UP',
     upiId: '7267995307@upi',
     isStoreOpen: true,

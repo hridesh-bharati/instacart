@@ -1,30 +1,25 @@
 {
   "expo": {
-    "name": "Instacart Grocery",
-    "slug": "hridesh",
+    "name": "ZapStore",
+    "slug": "zapstore",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-
     "runtimeVersion": {
       "policy": "appVersion"
     },
-
     "updates": {
       "url": "https://u.expo.dev/fcb699dd-df7a-42bf-b34d-82ac3c19d34f"
     },
-
     "ios": {
       "supportsTablet": true
     },
-
     "android": {
-      "package": "com.instacart.groceryapp",
+      "package": "com.zapstore.app",
       "adaptiveIcon": {
         "backgroundColor": "#0E382C"
       }
     },
-
     "extra": {
       "eas": {
         "projectId": "fcb699dd-df7a-42bf-b34d-82ac3c19d34f"
