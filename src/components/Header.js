@@ -1,7 +1,7 @@
 import React from 'react';
-import { StyleSheet, View, TextInput, Platform } from 'react-native';
+import { StyleSheet, View, TextInput, Platform, Image } from 'react-native';
 import { Text, Surface, IconButton, Badge } from 'react-native-paper';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import colors from '../constants/colors';
 
 export default function Header({ 
@@ -14,13 +14,14 @@ export default function Header({
 }) {
   return (
     <Surface style={styles.container} elevation={1}>
-      {/* Top Row: Brand & Action Icons */}
+      {/* Top Row: Brand Logo & Action Icons */}
       <View style={styles.topRow}>
         <View style={styles.logoWrap}>
-          <View style={styles.iconContainer}>
-            <MaterialCommunityIcons name="carrot" size={22} color={colors.secondary} />
-          </View>
-          <Text variant="titleLarge" style={styles.brandTitle}>ZapStore</Text>
+          <Image 
+            source={require('../../assets/images/logo.png')} 
+            style={styles.brandLogo} 
+            resizeMode="contain"
+          />
         </View>
 
         <View style={styles.actionWrap}>
@@ -107,23 +108,11 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   logoWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  iconContainer: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: '#FFF4ED',
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  brandTitle: {
-    fontWeight: '900',
-    color: colors.primary,
-    letterSpacing: -0.6,
-    fontSize: 22,
+  brandLogo: {
+    width: 120, // Aap apne logo ke aspect ratio ke hisaab se width adjust kar sakte hain
+    height: 36,
   },
   actionWrap: {
     flexDirection: 'row',

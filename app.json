@@ -5,18 +5,16 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/fcb699dd-df7a-42bf-b34d-82ac3c19d34f"
-    },
-    "ios": {
-      "supportsTablet": true
+    "icon": "./assets/images/febicon.png", 
+    "splash": {
+      "image": "./assets/images/febicon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0E382C"
     },
     "android": {
       "package": "com.zapstore.app",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/images/febicon.png",
         "backgroundColor": "#0E382C"
       }
     },
