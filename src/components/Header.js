@@ -23,7 +23,6 @@ export default function Header({
             resizeMode="contain"
           />
         </View>
-
         <View style={styles.actionWrap}>
           {/* Notifications Bell */}
           <View style={styles.iconWrapper}>
