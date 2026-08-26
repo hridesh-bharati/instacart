@@ -10,7 +10,6 @@ export const subscribeToNotifications = (uid, callback) => {
     callback(list);
   });
 };
-
 // Push a Notification
 export const sendNotification = async (uid, title, body) => {
   if (!db || !uid) return;
@@ -21,7 +20,6 @@ export const sendNotification = async (uid, title, body) => {
     createdAt: serverTimestamp(),
   });
 };
-
 // Mark Notification as Read
 export const markNotificationRead = async (uid, notifId) => {
   if (!db || !uid) return;
