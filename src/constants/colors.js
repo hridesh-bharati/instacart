@@ -1,3 +1,4 @@
+// src\constants\colors.js
 export default {
   primary: '#0E382C',
   secondary: '#FF6A00',

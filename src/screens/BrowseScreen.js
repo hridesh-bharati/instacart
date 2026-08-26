@@ -5,18 +5,40 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import { collection, onSnapshot, doc } from 'firebase/firestore';
+import { db, auth } from '../firebaseConfig';
 import ProductCard from '../components/ProductCard';
 import ProductDetailModal from '../components/ProductDetailModal';
-import { categories, flashSaleItems, dailyEssentials } from '../data/mockData';
+import { flashSaleItems, dailyEssentials } from '../data/mockData';
+import { toggleWishlistApi } from '../services/api/wishlist.api';
 import colors from '../constants/colors';
 
+// Compact Skeleton Component for Category Loading State
+function CategorySkeletonCard() {
+  return (
+    <View style={styles.categoryCardSkeleton}>
+      <View style={styles.skeletonCircle} />
+      <View style={styles.skeletonLineShort} />
+      <View style={styles.skeletonLineTiny} />
+    </View>
+  );
+}
+
+const PERMANENT_CATEGORIES = [
+  { id: 'cat-1', title: 'Grocery', icon: 'basket', bgColor: '#FEF3C7', textColor: '#D97706' },
+  { id: 'cat-2', title: 'Restaurants', icon: 'storefront', bgColor: '#FCE7F3', textColor: '#DB2777' },
+  { id: 'cat-3', title: 'Alcohol', icon: 'glass-wine', bgColor: '#EDE9FE', textColor: '#7C3AED' },
+  { id: 'cat-4', title: 'Retail', icon: 'shopping', bgColor: '#DCFCE7', textColor: '#16A34A' },
+  { id: 'cat-5', title: 'Electronics', icon: 'laptop', bgColor: '#E0F2FE', textColor: '#0284C7' },
+  { id: 'cat-6', title: 'Fashion', icon: 'tshirt-crew', bgColor: '#FEE2E2', textColor: '#DC2626' },
+  { id: 'cat-7', title: 'Beauty', icon: 'face-man-shave', bgColor: '#FCE7F3', textColor: '#BE185D' },
+  { id: 'cat-8', title: 'Pharmacy', icon: 'pill', bgColor: '#DCFCE7', textColor: '#059669' },
+  { id: 'cat-9', title: 'Home Decor', icon: 'home-outline', bgColor: '#FEF3C7', textColor: '#B45309' },
+];
+
 export default function BrowseScreen({ onAddToCart, initialCategory, onResetInitialCategory }) {
-  const [categoryList, setCategoryList] = useState([]);
   const [allProducts, setAllProducts] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(initialCategory || null);
   const [loading, setLoading] = useState(true);
@@ -25,8 +47,8 @@ export default function BrowseScreen({ onAddToCart, initialCategory, onResetInit
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [wishlist, setWishlist] = useState([]);
+  const currentUser = auth.currentUser;
 
-  // Sync category whenever passed from Home Screen
   useEffect(() => {
     if (initialCategory) {
       setSelectedCategory(initialCategory);
@@ -35,41 +57,57 @@ export default function BrowseScreen({ onAddToCart, initialCategory, onResetInit
 
   useEffect(() => {
     if (!db) {
-      setCategoryList(categories);
       setAllProducts([...flashSaleItems, ...dailyEssentials]);
       setLoading(false);
       return;
     }
 
-    // 1. Fetch Categories
-    const unsubCat = onSnapshot(collection(db, 'browseCategories'), (snapshot) => {
-      const fetched = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setCategoryList(fetched.length > 0 ? fetched : categories);
-    }, () => setCategoryList(categories));
-
-    // 2. Fetch All Products from Firebase Collections
+    // Sync All Products across collections
     const unsubFlash = onSnapshot(collection(db, 'flashSale'), (flashSnap) => {
       const flash = flashSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
       const unsubEss = onSnapshot(collection(db, 'dailyEssentials'), (essSnap) => {
         const ess = essSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const combined = [...flash, ...ess];
-        setAllProducts(combined.length > 0 ? combined : [...flashSaleItems, ...dailyEssentials]);
-        setLoading(false);
+
+        const unsubTabs = onSnapshot(collection(db, 'browseCategories'), (tabSnap) => {
+          const tabProds = tabSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const combined = [...flash, ...ess, ...tabProds];
+          setAllProducts(combined.length > 0 ? combined : [...flashSaleItems, ...dailyEssentials]);
+          setLoading(false);
+        }, () => {
+          setAllProducts([...flash, ...ess]);
+          setLoading(false);
+        });
+
+        return () => unsubTabs();
       }, () => {
-        setAllProducts([...flash, ...dailyEssentials]);
+        setAllProducts(flash);
         setLoading(false);
       });
+
       return () => unsubEss();
     }, () => {
       setAllProducts([...flashSaleItems, ...dailyEssentials]);
       setLoading(false);
     });
 
+    // Sync User Wishlist
+    let unsubUser = () => {};
+    if (currentUser) {
+      unsubUser = onSnapshot(doc(db, 'users', currentUser.uid), (docSnap) => {
+        if (docSnap.exists() && docSnap.data().wishlist) {
+          setWishlist(docSnap.data().wishlist.map((p) => p.id));
+        } else {
+          setWishlist([]);
+        }
+      });
+    }
+
     return () => {
-      unsubCat();
       unsubFlash();
+      unsubUser();
     };
-  }, []);
+  }, [currentUser]);
 
   const handleBackToAllCategories = () => {
     setSelectedCategory(null);
@@ -81,33 +119,43 @@ export default function BrowseScreen({ onAddToCart, initialCategory, onResetInit
     setDetailModalVisible(true);
   };
 
-  const handleToggleWishlist = (item) => {
-    setWishlist((prev) =>
-      prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
-    );
+  const handleToggleWishlist = async (item) => {
+    if (!currentUser) {
+      alert('Please sign in to manage your wishlist.');
+      return;
+    }
+    const isFav = wishlist.includes(item.id);
+    try {
+      await toggleWishlistApi(currentUser.uid, item, isFav);
+      setWishlist((prev) =>
+        isFav ? prev.filter((id) => id !== item.id) : [...prev, item.id]
+      );
+    } catch (err) {
+      console.error('Wishlist error:', err);
+    }
   };
 
-  // Filter products by selected category
+  // Filter items matching selected category tag
   const getCategoryProducts = () => {
     if (!selectedCategory) return [];
     const catName = (selectedCategory.title || '').toLowerCase().trim();
 
-    const matched = allProducts.filter((p) => {
+    return allProducts.filter((p) => {
       const prodCat = (p.category || p.tag || '').toLowerCase().trim();
       const prodName = (p.name || p.title || '').toLowerCase().trim();
       return prodCat === catName || prodCat.includes(catName) || prodName.includes(catName);
     });
-
-    // Fallback: Show all products if no exact tag matches yet
-    return matched.length > 0 ? matched : allProducts;
   };
 
   const categoryProducts = getCategoryProducts();
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
-      
-      {/* 1. CATEGORY DETAIL ITEMS VIEW */}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 110 }}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* 1. FILTERED CATEGORY VIEW */}
       {selectedCategory ? (
         <View style={styles.detailView}>
           <TouchableOpacity style={styles.backRow} onPress={handleBackToAllCategories}>
@@ -120,46 +168,66 @@ export default function BrowseScreen({ onAddToCart, initialCategory, onResetInit
             <Text style={styles.categoryItemCount}>({categoryProducts.length} items)</Text>
           </View>
 
-          <View style={styles.productGrid}>
-            {categoryProducts.map((prod) => (
-              <ProductCard
-                key={prod.id}
-                item={prod}
-                onAddToCart={onAddToCart}
-                onOpenDetails={handleOpenDetails}
-                isWishlisted={wishlist.includes(prod.id)}
-                onToggleWishlist={handleToggleWishlist}
-              />
-            ))}
-          </View>
+          {loading ? (
+            <View style={styles.productGrid}>
+              <CategorySkeletonCard />
+              <CategorySkeletonCard />
+              <CategorySkeletonCard />
+            </View>
+          ) : categoryProducts.length === 0 ? (
+            <View style={styles.emptyWrap}>
+              <MaterialCommunityIcons name="basket-outline" size={54} color={colors.textMuted} />
+              <Text style={styles.emptyText}>No items added to {selectedCategory.title} yet.</Text>
+            </View>
+          ) : (
+            <View style={styles.productGrid}>
+              {categoryProducts.map((prod) => (
+                <ProductCard
+                  key={prod.id}
+                  item={prod}
+                  onAddToCart={onAddToCart}
+                  onOpenDetails={handleOpenDetails}
+                  isWishlisted={wishlist.includes(prod.id)}
+                  onToggleWishlist={handleToggleWishlist}
+                />
+              ))}
+            </View>
+          )}
         </View>
       ) : (
-        /* 2. ALL CATEGORIES GRID VIEW */
+        /* 2. 3x3 CATEGORY CARDS GRID USING MAP */
         <>
           <Text style={styles.screenHeading}>Explore Categories</Text>
 
           {loading ? (
-            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 20 }} />
+            <View style={styles.grid}>
+              {[...Array(9)].map((_, i) => (
+                <CategorySkeletonCard key={i} />
+              ))}
+            </View>
           ) : (
             <View style={styles.grid}>
-              {categoryList.map((item) => (
-                <TouchableOpacity
-                  key={item.id || item.title}
-                  style={styles.categoryCard}
-                  activeOpacity={0.8}
-                  onPress={() => setSelectedCategory(item)}
-                >
-                  <View style={[styles.iconCircle, { backgroundColor: item.bgColor || item.color || '#FFF3E0' }]}>
-                    <MaterialCommunityIcons
-                      name={item.icon || 'basket'}
-                      size={28}
-                      color={colors.primary}
-                    />
-                  </View>
-                  <Text style={styles.cardTitle}>{item.title}</Text>
-                  <Text style={styles.cardCount}>{item.count || `${item.itemCount || 100}+ items`}</Text>
-                </TouchableOpacity>
-              ))}
+              {PERMANENT_CATEGORIES.map((cat) => {
+                const count = allProducts.filter((p) => {
+                  const prodCat = (p.category || p.tag || '').toLowerCase().trim();
+                  return prodCat === cat.title.toLowerCase();
+                }).length;
+
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={styles.categoryCard}
+                    activeOpacity={0.8}
+                    onPress={() => setSelectedCategory(cat)}
+                  >
+                    <View style={[styles.iconCircle, { backgroundColor: cat.bgColor }]}>
+                      <MaterialCommunityIcons name={cat.icon} size={24} color={cat.textColor} />
+                    </View>
+                    <Text style={styles.cardTitle} numberOfLines={1}>{cat.title}</Text>
+                    <Text style={styles.cardCount} numberOfLines={1}>{count} items</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </>
@@ -174,37 +242,55 @@ export default function BrowseScreen({ onAddToCart, initialCategory, onResetInit
         isWishlisted={selectedProduct ? wishlist.includes(selectedProduct.id) : false}
         onToggleWishlist={handleToggleWishlist}
       />
-
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA', padding: 16 },
-  screenHeading: { fontSize: 20, fontWeight: '800', color: colors.primary, marginBottom: 16, marginTop: 4 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 14 },
+  container: { flex: 1, backgroundColor: '#F8F9FA', padding: 12 },
+  screenHeading: { fontSize: 18, fontWeight: '800', color: colors.primary, marginBottom: 12, marginTop: 4 },
+  grid: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: '3%', 
+    rowGap: 10 
+  },
   categoryCard: {
-    width: '48%',
+    width: '31%', // Exactly 3 cards per row
     backgroundColor: '#fff',
-    borderRadius: 20,
-    paddingVertical: 20,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#EFEFEF',
     elevation: 2,
     shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
-  iconCircle: { width: 62, height: 62, borderRadius: 31, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: colors.textDark, textAlign: 'center' },
-  cardCount: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  iconCircle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  cardTitle: { fontSize: 11, fontWeight: '800', color: colors.textDark, textAlign: 'center' },
+  cardCount: { fontSize: 9, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
+  categoryCardSkeleton: {
+    width: '31%',
+    backgroundColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    opacity: 0.6,
+  },
+  skeletonCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#D1D5DB', marginBottom: 6 },
+  skeletonLineShort: { width: '60%', height: 10, borderRadius: 4, backgroundColor: '#D1D5DB', marginBottom: 4 },
+  skeletonLineTiny: { width: '40%', height: 8, borderRadius: 4, backgroundColor: '#D1D5DB' },
   detailView: { marginTop: 4 },
   backRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
   backText: { fontSize: 14, fontWeight: '700', color: colors.primary },
   categoryTitleHeader: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 16 },
-  categoryHeaderTitle: { fontSize: 22, fontWeight: '800', color: colors.textDark },
-  categoryItemCount: { fontSize: 13, color: colors.textMuted },
-  productGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  categoryHeaderTitle: { fontSize: 20, fontWeight: '800', color: colors.textDark },
+  categoryItemCount: { fontSize: 12, color: colors.textMuted },
+  productGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 8 },
+  emptyText: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
 });

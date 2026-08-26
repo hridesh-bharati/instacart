@@ -1,53 +1,104 @@
 import React from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, TextInput, Platform } from 'react-native';
+import { Text, Surface, IconButton, Badge } from 'react-native-paper';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import colors from '../constants/colors';
 
-export default function Header({ cartCount, onOpenCart }) {
+export default function Header({ 
+  cartCount = 0, 
+  onOpenCart, 
+  onOpenNotifications, 
+  notificationCount = 0,
+  searchQuery = '',
+  onSearchChange
+}) {
   return (
-    <View style={styles.container}>
+    <Surface style={styles.container} elevation={1}>
+      {/* Top Row: Brand & Action Icons */}
       <View style={styles.topRow}>
         <View style={styles.logoWrap}>
-          <MaterialCommunityIcons name="carrot" size={26} color={colors.secondary} />
-          <Text style={styles.brandTitle}>instacart</Text>
+          <View style={styles.iconContainer}>
+            <MaterialCommunityIcons name="carrot" size={22} color={colors.secondary} />
+          </View>
+          <Text variant="titleLarge" style={styles.brandTitle}>instacart</Text>
         </View>
+
         <View style={styles.actionWrap}>
-          <TouchableOpacity style={styles.circleBtn} onPress={onOpenCart}>
-            <Ionicons name="cart-outline" size={20} color={colors.textDark} />
-            {cartCount > 0 && (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>{cartCount}</Text>
-              </View>
+          {/* Notifications Bell */}
+          <View style={styles.iconWrapper}>
+            <IconButton
+              icon="bell-outline"
+              size={20}
+              iconColor={colors.textDark}
+              style={styles.circleBtn}
+              onPress={onOpenNotifications}
+            />
+            {notificationCount > 0 && (
+              <Badge size={16} style={styles.notificationBadge}>
+                {notificationCount}
+              </Badge>
             )}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.circleBtn}>
-            <Ionicons name="notifications-outline" size={20} color={colors.textDark} />
-          </TouchableOpacity>
+          </View>
+
+          {/* Cart Icon */}
+          <View style={styles.iconWrapper}>
+            <IconButton
+              icon="cart-outline"
+              size={20}
+              iconColor={colors.textDark}
+              style={styles.circleBtn}
+              onPress={onOpenCart}
+            />
+            {cartCount > 0 && (
+              <Badge size={16} style={styles.cartBadge}>
+                {cartCount}
+              </Badge>
+            )}
+          </View>
         </View>
       </View>
 
+      {/* Search Bar & Filter Row */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
-          <Ionicons name="search-outline" size={18} color="#777" />
+          <Ionicons name="search-outline" size={18} color={colors.textMuted} />
           <TextInput
-            placeholder="Search products, stores, and restaurant"
-            placeholderTextColor="#999"
+            placeholder="Search products, stores, and restaurants"
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={onSearchChange}
             style={styles.input}
           />
         </View>
-        <TouchableOpacity style={styles.filterBtn}>
-          <Ionicons name="options-outline" size={20} color="#fff" />
-        </TouchableOpacity>
+        
+        <Surface style={styles.filterBtnSurface} elevation={2}>
+          <IconButton
+            icon="tune"
+            size={18}
+            iconColor="#fff"
+            style={styles.filterBtn}
+            onPress={() => {}}
+          />
+        </Surface>
       </View>
-    </View>
+    </Surface>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
+    backgroundColor: colors.cardBg,
+    paddingHorizontal: 18,
+    paddingTop: Platform.OS === 'ios' ? 8 : 12,
+    paddingBottom: 14,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
   },
   topRow: {
     flexDirection: 'row',
@@ -58,43 +109,52 @@ const styles = StyleSheet.create({
   logoWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
+  },
+  iconContainer: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: '#FFF4ED',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   brandTitle: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.primary,
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
+    fontSize: 22,
   },
   actionWrap: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+  },
+  iconWrapper: {
+    position: 'relative',
   },
   circleBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.cardBg,
-    justifyContent: 'center',
-    alignItems: 'center',
+    margin: 0,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
-    position: 'relative',
   },
   cartBadge: {
     position: 'absolute',
-    top: -3,
-    right: -3,
+    top: 2,
+    right: 2,
     backgroundColor: colors.secondary,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cartBadgeText: {
     color: '#fff',
-    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    backgroundColor: colors.danger,
+    color: '#fff',
     fontWeight: 'bold',
   },
   searchRow: {
@@ -106,25 +166,29 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.cardBg,
+    backgroundColor: colors.background,
     paddingHorizontal: 14,
-    height: 44,
-    borderRadius: 22,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 8,
+    gap: 10,
   },
   input: {
     flex: 1,
     fontSize: 13,
     color: colors.textDark,
+    fontWeight: '500',
+  },
+  filterBtnSurface: {
+    borderRadius: 24,
+    backgroundColor: colors.primary,
+    overflow: 'hidden',
   },
   filterBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    margin: 0,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
 });

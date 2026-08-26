@@ -2,26 +2,34 @@ import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
+  ScrollView,
+  Platform,
   Alert,
 } from 'react-native';
+import { Text, TextInput, Button, Card, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { loginUser, registerUser } from '../services/api';
+import { loginUser, registerUser } from '../services/api/auth.api';
 import colors from '../constants/colors';
 
-export default function AuthScreen() {
+export default function AuthScreen({ onSuccess }) {
   const [isLogin, setIsLogin] = useState(true);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [secureText, setSecureText] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  const showAlert = (title, message) => {
+    if (Platform.OS === 'web') {
+      alert(`${title}: ${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
 
   const handleAuth = async () => {
     if (!email || !password || (!isLogin && !name)) {
-      Alert.alert('Required', 'Please fill all input fields');
+      showAlert('Required', 'Please fill all input fields');
       return;
     }
 
@@ -32,127 +40,143 @@ export default function AuthScreen() {
       } else {
         await registerUser(name, email, password);
       }
+      if (onSuccess) onSuccess();
     } catch (err) {
-      Alert.alert('Error', err.message);
+      showAlert('Authentication Error', err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <View style={styles.logoRow}>
-          <MaterialCommunityIcons name="carrot" size={32} color={colors.secondary} />
-          <Text style={styles.brandTitle}>instacart</Text>
-        </View>
+    <ScrollView contentContainerStyle={styles.container}>
+      <Card style={styles.card}>
+        <Card.Content>
+          {/* Brand Logo Row */}
+          <View style={styles.logoRow}>
+            <MaterialCommunityIcons name="carrot" size={30} color={colors.secondary} />
+            <Text variant="titleLarge" style={styles.brandTitle}>instacart</Text>
+          </View>
 
-        <Text style={styles.heading}>{isLogin ? 'Sign In' : 'Create Account'}</Text>
-        <Text style={styles.subheading}>
-          {isLogin ? 'Welcome back! Enter credentials' : 'Register to get fresh deliveries'}
-        </Text>
-
-        {!isLogin && (
-          <TextInput
-            placeholder="Full Name"
-            value={name}
-            onChangeText={setName}
-            style={styles.input}
-            placeholderTextColor="#888"
-          />
-        )}
-
-        <TextInput
-          placeholder="Email Address"
-          value={email}
-          onChangeText={setEmail}
-          style={styles.input}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholderTextColor="#888"
-        />
-
-        <TextInput
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          style={styles.input}
-          placeholderTextColor="#888"
-        />
-
-        <TouchableOpacity style={styles.submitBtn} onPress={handleAuth} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.submitBtnText}>{isLogin ? 'Login' : 'Sign Up'}</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => setIsLogin(!isLogin)} style={styles.toggleBtn}>
-          <Text style={styles.toggleText}>
-            {isLogin ? "New user? Create an account" : 'Already registered? Login'}
+          <Text variant="titleMedium" style={styles.heading}>
+            {isLogin ? 'Sign In' : 'Create Account'}
           </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+          <Text variant="bodySmall" style={styles.subheading}>
+            {isLogin ? 'Welcome back! Enter your credentials' : 'Register to get fresh deliveries in 15 mins'}
+          </Text>
+
+          {!isLogin && (
+            <TextInput
+              label="Full Name"
+              mode="outlined"
+              value={name}
+              onChangeText={setName}
+              style={styles.input}
+              outlineColor={colors.border}
+              activeOutlineColor={colors.primary}
+            />
+          )}
+
+          <TextInput
+            label="Email Address"
+            mode="outlined"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            style={styles.input}
+            outlineColor={colors.border}
+            activeOutlineColor={colors.primary}
+          />
+
+          <TextInput
+            label="Password"
+            mode="outlined"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={secureText}
+            style={styles.input}
+            outlineColor={colors.border}
+            activeOutlineColor={colors.primary}
+            right={
+              <TextInput.Icon
+                icon={secureText ? 'eye-off' : 'eye'}
+                onPress={() => setSecureText(!secureText)}
+              />
+            }
+          />
+
+          <Button
+            mode="contained"
+            buttonColor={colors.primary}
+            style={styles.submitBtn}
+            contentStyle={{ height: 48 }}
+            onPress={handleAuth}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator animating={true} color="#fff" size="small" />
+            ) : (
+              <Text style={styles.submitBtnText}>{isLogin ? 'Login' : 'Sign Up'}</Text>
+            )}
+          </Button>
+
+          <Button
+            mode="text"
+            textColor={colors.secondary}
+            style={styles.toggleBtn}
+            onPress={() => setIsLogin(!isLogin)}
+          >
+            {isLogin ? "New user? Create an account" : 'Already registered? Login'}
+          </Button>
+        </Card.Content>
+      </Card>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: colors.background,
     justifyContent: 'center',
     padding: 20,
   },
   card: {
-    backgroundColor: colors.cardBg,
+    backgroundColor: colors.cardBg || '#fff',
     borderRadius: 24,
-    padding: 24,
+    padding: 8,
     borderWidth: 1,
     borderColor: colors.border,
+    elevation: 2,
   },
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   brandTitle: {
-    fontSize: 22,
     fontWeight: '800',
     color: colors.primary,
   },
   heading: {
-    fontSize: 20,
     fontWeight: 'bold',
     color: colors.textDark,
   },
   subheading: {
-    fontSize: 12,
     color: colors.textMuted,
-    marginBottom: 18,
+    marginBottom: 16,
     marginTop: 2,
   },
   input: {
     backgroundColor: '#F9F9F9',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    height: 46,
-    fontSize: 14,
-    color: colors.textDark,
-    borderWidth: 1,
-    borderColor: colors.border,
     marginBottom: 12,
+    fontSize: 14,
   },
   submitBtn: {
-    backgroundColor: colors.primary,
-    height: 48,
     borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 6,
+    marginTop: 4,
   },
   submitBtnText: {
     color: '#fff',
@@ -160,12 +184,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   toggleBtn: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  toggleText: {
-    color: colors.secondary,
-    fontSize: 13,
-    fontWeight: '600',
+    marginTop: 12,
   },
 });

@@ -28,9 +28,24 @@ export default function ProductDetailModal({
   const oldPrice = product.oldPrice
     ? typeof product.oldPrice === 'number'
       ? product.oldPrice
-      : parseFloat(product.oldPrice.replace(/[^0-9.]/g, ''))
+      : parseFloat(product.oldPrice.toString().replace(/[^0-9.]/g, ''))
     : null;
-  const discount = oldPrice && oldPrice > price ? Math.round(((oldPrice - price) / oldPrice) * 100) : null;
+
+  // Calculate or retrieve custom discount
+  const discountVal = product.discount
+    ? product.discount
+    : oldPrice && oldPrice > price
+    ? Math.round(((oldPrice - price) / oldPrice) * 100)
+    : null;
+
+  // Retrieve custom highlights or fallback
+  const highlightsList = Array.isArray(product.highlights) && product.highlights.length > 0
+    ? product.highlights
+    : [
+        '100% Quality checked & hygienically packed.',
+        'Directly sourced from trusted suppliers.',
+        'Easy 24-hour return and replacement guarantee.',
+      ];
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
@@ -49,7 +64,7 @@ export default function ProductDetailModal({
               <Ionicons
                 name={isWishlisted ? 'heart' : 'heart-outline'}
                 size={22}
-                color={isWishlisted ? '#E53935' : colors.textDark}
+                color={isWishlisted ? colors.danger : colors.textDark}
               />
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconCircle}>
@@ -62,20 +77,20 @@ export default function ProductDetailModal({
           {/* Main Product Image */}
           <View style={styles.imageContainer}>
             <Image source={{ uri: product.image }} style={styles.mainImage} resizeMode="contain" />
-            {discount && (
+            {discountVal ? (
               <View style={styles.discountTag}>
-                <Text style={styles.discountTagText}>{discount}% SPECIAL DISCOUNT</Text>
+                <Text style={styles.discountTagText}>{discountVal}% SPECIAL DISCOUNT</Text>
               </View>
-            )}
+            ) : null}
           </View>
 
           {/* Pricing & Ratings */}
           <View style={styles.content}>
             <View style={styles.brandRow}>
-              <Text style={styles.brandText}>{product.brand || 'Instacart Fresh'}</Text>
+              <Text style={styles.brandText}>{product.brand || 'Instacart Verified'}</Text>
               <View style={styles.ratingBadge}>
                 <Ionicons name="star" size={13} color="#fff" />
-                <Text style={styles.ratingBadgeText}>{product.rating || '4.5'}</Text>
+                <Text style={styles.ratingBadgeText}>{product.rating || '4.8'}</Text>
               </View>
             </View>
 
@@ -90,7 +105,7 @@ export default function ProductDetailModal({
 
             {/* Delivery Guarantee */}
             <View style={styles.deliveryBox}>
-              <Ionicons name="flash-outline" size={20} color="#16A34A" />
+              <Ionicons name="flash-outline" size={20} color={colors.success} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.deliveryTitle}>Superfast Instant Delivery in 10-15 Mins</Text>
                 <Text style={styles.deliverySub}>Guaranteed fresh products directly from local hub</Text>
@@ -99,17 +114,20 @@ export default function ProductDetailModal({
 
             {/* Product Highlights */}
             <Text style={styles.sectionHeading}>Product Highlights</Text>
-            <View style={styles.highlightsList}>
-              <Text style={styles.highlightItem}>• 100% Organic, clean, and quality checked.</Text>
-              <Text style={styles.highlightItem}>• Direct source from verified certified partner farms.</Text>
-              <Text style={styles.highlightItem}>• Easy 24-hour return and replacement policy.</Text>
+            <View style={styles.highlightsWrap}>
+              {highlightsList.map((item, idx) => (
+                <View key={idx} style={styles.highlightRow}>
+                  <Ionicons name="checkmark-circle" size={16} color={colors.primary} style={{ marginTop: 2 }} />
+                  <Text style={styles.highlightItem}>{item}</Text>
+                </View>
+              ))}
             </View>
 
             {/* Product Description */}
             <Text style={styles.sectionHeading}>Description & Details</Text>
             <Text style={styles.descText}>
               {product.description ||
-                'High-grade grocery item prepared and stored with hygiene. Ideal for daily home cooking, dietary routines, and balanced nutrition.'}
+                'High-grade everyday item prepared and stored with hygiene. Ideal for regular household use and daily routines.'}
             </Text>
           </View>
         </ScrollView>
@@ -148,29 +166,31 @@ export default function ProductDetailModal({
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#fff' },
+  safeArea: { flex: 1, backgroundColor: colors.cardBg },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.border,
   },
   iconCircle: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   headerActions: { flexDirection: 'row', gap: 10 },
   scrollBody: { paddingBottom: 100 },
   imageContainer: {
     width: '100%',
     height: 280,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -180,7 +200,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 12,
     left: 16,
-    backgroundColor: '#16A34A',
+    backgroundColor: colors.success,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -192,7 +212,7 @@ const styles = StyleSheet.create({
   ratingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#16A34A',
+    backgroundColor: colors.success,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -203,7 +223,7 @@ const styles = StyleSheet.create({
   unitText: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 12 },
   currentPrice: { fontSize: 24, fontWeight: '900', color: colors.textDark },
-  strikePrice: { fontSize: 15, color: '#9CA3AF', textDecorationLine: 'line-through' },
+  strikePrice: { fontSize: 15, color: colors.textMuted, textDecorationLine: 'line-through' },
   taxText: { fontSize: 11, color: colors.textMuted },
   deliveryBox: {
     flexDirection: 'row',
@@ -218,30 +238,33 @@ const styles = StyleSheet.create({
   },
   deliveryTitle: { fontSize: 13, fontWeight: '800', color: '#166534' },
   deliverySub: { fontSize: 11, color: '#15803D', marginTop: 2 },
-  sectionHeading: { fontSize: 16, fontWeight: '800', color: colors.textDark, marginTop: 22, marginBottom: 8 },
-  highlightsList: { gap: 6 },
-  highlightItem: { fontSize: 13, color: '#4B5563', lineHeight: 20 },
+  sectionHeading: { fontSize: 16, fontWeight: '800', color: colors.textDark, marginTop: 22, marginBottom: 10 },
+  highlightsWrap: { gap: 8 },
+  highlightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  highlightItem: { fontSize: 13, color: '#4B5563', lineHeight: 20, flex: 1 },
   descText: { fontSize: 13, color: '#4B5563', lineHeight: 20 },
   footerBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     paddingHorizontal: 16,
     paddingVertical: 12,
     flexDirection: 'row',
     gap: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
     elevation: 10,
   },
   qtyControl: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.background,
     borderRadius: 10,
     paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   qtyBtn: { width: 32, height: 38, justifyContent: 'center', alignItems: 'center' },
   qtyNumber: { paddingHorizontal: 10, fontSize: 15, fontWeight: '800', color: colors.textDark },
