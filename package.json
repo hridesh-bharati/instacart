@@ -1,10 +1,11 @@
 {
- "name": "zapstore-app",
+  "name": "zapstore-app",
   "version": "1.0.0",
   "main": "index.js",
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "expo": "~57.0.16",
+    "expo-dev-client": "~57.0.15",
     "expo-image-picker": "~57.0.13",
     "expo-status-bar": "~57.0.1",
     "expo-updates": "~57.0.17",
