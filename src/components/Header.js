@@ -39,7 +39,6 @@ export default function Header({
               </Badge>
             )}
           </View>
-
           {/* Cart Icon */}
           <View style={styles.iconWrapper}>
             <IconButton
