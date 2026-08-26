@@ -8,7 +8,6 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
 
 export const ADMIN_EMAIL = 'hridesh027@gmail.com';
-
 export const checkIsAdmin = (user) => {
   if (!user || !user.email) return false;
   return user.email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
