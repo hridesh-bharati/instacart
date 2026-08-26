@@ -1,19 +1,4 @@
-name: Build Android APK and Publish Update
-
-on:
-  push:
-    branches:
-      - main
-      - master
-
-  workflow_dispatch:
-
-jobs:
-
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
+steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -22,50 +7,13 @@ jobs:
         with:
           node-version: 22
 
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: 17
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup EAS CLI
+        run: npm install -g eas-cli
 
       - name: Install Dependencies
         run: npm install
 
-      - name: Prebuild Android
-        run: npx expo prebuild --clean --platform android
-
-      - name: Build APK
-        working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: zapstore-grocery-apk
-          path: android/app/build/outputs/apk/debug/*.apk
-
-
-  update:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install Dependencies & EAS CLI
-        run: |
-          npm install
-          npm install -g eas-cli
-
-      - name: Publish EAS Update
-        run: npx eas update --channel production --platform android --message "Automatic update from GitHub"
+      - name: Build Production APK with EAS
+        run: npx eas build --platform android --profile production --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
