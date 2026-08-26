@@ -1,4 +1,18 @@
-steps:
+name: Build Android APK and Publish Update
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -14,6 +28,6 @@ steps:
         run: npm install
 
       - name: Build Production APK with EAS
-        run: npx eas build --platform android --profile production --non-interactive
+        run: npx eas build --platform android --profile production --non-interactive --auto-submit=false
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
